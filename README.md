@@ -50,4 +50,4 @@ pwsh -NoProfile -File Install-PwshHuLine.ps1 -Uninstall   # 卸载（只摘掉�
 
 ## 许可
 
-MIT © Winter
+MIT © Violetylove
