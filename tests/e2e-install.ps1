@@ -47,7 +47,7 @@ $text = Read-Text $profilePath
 Check 'install-copies-module' (Test-Path (Join-Path $installed 'pwsh-hu-line.psm1') -PathType Leaf) "psm1 at $installed"
 Check 'install-copies-src-tree' (Test-Path (Join-Path $installed 'src/HuLine.ps1') -PathType Leaf) 'src/HuLine.ps1 present'
 Check 'install-copies-every-class-file' `
-    (@('HuCore.ps1', 'HuHistory.ps1', 'HuLine.ps1', 'HuMenu.ps1', 'HuCommand.ps1', 'HuLog.ps1' |
+    (@('HuCore.ps1', 'HuHistory.ps1', 'HuLine.ps1', 'HuMenu.ps1', 'HuCommand.ps1' |
         Where-Object { -not (Test-Path (Join-Path $installed "src/$_") -PathType Leaf) }).Count -eq 0) 'all src files copied'
 Check 'install-wires-profile-once' ((Count-Of $text '# >>> pwsh-hu-line') -eq 1 -and (Count-Of $text 'Enter-HuLineRepl') -eq 1) `
     ("blocks={0} repl-lines={1}" -f (Count-Of $text '# >>> pwsh-hu-line'), (Count-Of $text 'Enter-HuLineRepl'))

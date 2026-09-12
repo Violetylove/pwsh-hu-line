@@ -14,8 +14,6 @@
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-# keep this run's diagnostic log in TEMP and read it back at the end
-$env:HU_LINE_LOG = Join-Path ([System.IO.Path]::GetTempPath()) ('hu-line-identity-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.log')
 $dupDir = Join-Path ([System.IO.Path]::GetTempPath()) ('hu-line-dup-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 $dupMod = Join-Path $dupDir 'pwsh-hu-line-dup'
 New-Item -ItemType Directory -Force -Path $dupMod | Out-Null
@@ -83,15 +81,6 @@ $replWarnings = @()
 Enter-HuLineRepl -WarningVariable replWarnings -WarningAction SilentlyContinue 6>$null 2>$null
 $guardHit = @($replWarnings | Where-Object { $_ -like '*退出 pwsh*' }).Count -gt 0
 Check 'repl-guard-detects-double-load' $guardHit ("warnings=[{0}]" -f (@($replWarnings) -join ' / '))
-
-# The diagnostic log must contain the evidence trail: which class identities this
-# copy resolved, and what the guard decided. This is the file that replaces
-# guessing when something unexplainable happens in a real session.
-$logText = ''
-if (Test-Path -LiteralPath $env:HU_LINE_LOG) { $logText = [System.IO.File]::ReadAllText($env:HU_LINE_LOG, [System.Text.UTF8Encoding]::new($false)) }
-Check 'diagnostic-log-has-identity' ($logText -like '*ident*HuLineBuffer=*') 'load-time identity fingerprint present'
-Check 'diagnostic-log-has-guard' ($logText -like '*guard*copies=2*') ("guard decision with copies=2; log has {0} lines" -f (@($logText -split "`n").Count))
-Remove-Item -LiteralPath $env:HU_LINE_LOG -ErrorAction SilentlyContinue
 
 # demo.ps1 must refuse to start a second time in the same process: that is the
 # state that produces a broken editor (every keystroke throws). Checked in a child

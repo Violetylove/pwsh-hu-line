@@ -81,9 +81,7 @@ try {
     [System.IO.File]::WriteAllText($scriptPath, "[System.IO.File]::WriteAllText('$marker', 'ran')`r`n", $utf8)
 
     $oldHome = $env:USERPROFILE
-    $oldLog = $env:HU_LINE_LOG
     $env:USERPROFILE = $probeHome
-    $env:HU_LINE_LOG = Join-Path $probe 'child.log'
     try {
         $conhost = Join-Path $env:SystemRoot 'System32\conhost.exe'
         $p = Start-Process -FilePath $conhost -PassThru `
@@ -97,7 +95,6 @@ try {
             "script ran=$ran exited=$exited waited=$(-not $exited)"
     } finally {
         $env:USERPROFILE = $oldHome
-        $env:HU_LINE_LOG = $oldLog
         Remove-Item -LiteralPath $probe -Recurse -Force -ErrorAction SilentlyContinue
     }
 } catch {

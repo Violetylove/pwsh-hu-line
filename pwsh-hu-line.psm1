@@ -8,7 +8,6 @@ $srcDir = Join-Path $PSScriptRoot 'src'
 . (Join-Path $srcDir 'HuLine.ps1')
 . (Join-Path $srcDir 'HuMenu.ps1')
 . (Join-Path $srcDir 'HuCommand.ps1')   # 命令着色
-. (Join-Path $srcDir 'HuLog.ps1')       # 最后：它的 Identity() 要给上面的类取指纹
 
 # 本份代码的"修订指纹"：Enter-HuLineRepl 接管前与磁盘比对——源文件在加载后被改过，
 # 就说明本进程跑的是旧类，必须重开 pwsh（带类的模块不能热重载）。
@@ -16,11 +15,6 @@ $script:HuSourceStamp = @{}
 foreach ($huFile in @($PSCommandPath) + @(Get-ChildItem -LiteralPath $srcDir -Filter '*.ps1' | ForEach-Object { $_.FullName })) {
     try { $script:HuSourceStamp[$huFile] = (Get-Item -LiteralPath $huFile).LastWriteTimeUtc.Ticks } catch { }
 }
-
-[HuLog]::Init('')
-[HuLog]::Write('info', 'load', "pwsh=$($PSVersionTable.PSVersion) pid=$PID module=$PSCommandPath")
-[HuLog]::Write('info', 'ident', [HuLog]::Identity())
-[HuLog]::Write('info', 'env', [HuLog]::Environment())
 
 # 把"类对象过时"这种非逻辑错误换成人话：进程里若混有旧修订的 [HuCompletionApplier]，
 # 它的类型化 Apply() 会以 "Cannot convert ... to type ..." 拒绝我们的 buffer。
@@ -30,22 +24,9 @@ function Invoke-HuCompletionApply {
     try {
         [void][HuCompletionApplier]::Apply($Buffer, $Item, $ReplaceIndex, $ReplaceLength)
     } catch {
-        # Record the one fact that settles "which class object won": the runtime
-        # handle of the buffer's type vs the handle of the parameter that the
-        # resolved Apply() declares. Equal handles + a failure = something else;
-        # different handles = two revisions of this module alive in this process.
-        try {
-            $paramType = [HuCompletionApplier].GetMethod('Apply').GetParameters()[0].ParameterType
-            [HuLog]::Write('error', 'apply', ('buffer={0} applyBufferParam={1} identical={2} bufferText=[{3}]' -f
-                [HuLog]::HandleOf($Buffer.GetType()),
-                [HuLog]::HandleOf($paramType),
-                ($paramType.TypeHandle.Value -eq $Buffer.GetType().TypeHandle.Value),
-                $Buffer.Text))
-        } catch { }
-        [HuLog]::Error('apply', 'completion apply failed', $_)
         throw ("$($_.Exception.Message)`n提示：若上述错误是 class 转换（HuLineBuffer → HuLineBuffer），" +
                '说明本 pwsh 进程里混有旧版本模块的类对象（热重载 pwsh-hu-line 所致），不是仓库代码的问题。' +
-               "请完全退出 pwsh 重开，再运行 demo.ps1。诊断日志：$([HuLog]::Path)")
+               '请完全退出 pwsh 重开，再运行 demo.ps1。')
     }
 }
 
@@ -608,21 +589,15 @@ function Enter-HuLineRepl {
         [void]$smoke.Add("highlight+render=$($_.Exception.Message)")
         $selfTest = $_.Exception.Message
     }
-    [HuLog]::Write('info', 'guard', ("copies={0} staleFiles={1} selfTest={2} smoke=[{3}]" -f
-        $copies.Count, $staleFiles.Count, $selfTest, ($smoke -join ' ; ')))
-    [HuLog]::Write('info', 'ident', [HuLog]::Identity())
-
     if ($copies.Count -gt 1) {
         Write-Warning ("本进程加载了 $($copies.Count) 份 pwsh-hu-line（热重载会留下旧版本的类对象）——" +
                        'Tab 补全必然会报 class 转换错误。请完全退出 pwsh 重开，再运行 demo.ps1。')
         foreach ($c in $copies) { Write-Warning ('  - ' + $c.Name + ' @ ' + $c.Path) }
-        [HuLog]::Write('warn', 'guard', 'refused: multiple module copies loaded')
         return
     }
     if ($staleFiles.Count -gt 0) {
         Write-Warning ("本进程里的 pwsh-hu-line 已过期（$($staleFiles.Count) 个源文件在加载之后被改过）——" +
                        'PowerShell 无法安全热重载带类的模块，请完全退出 pwsh 重开。')
-        foreach ($f in $staleFiles) { [HuLog]::Write('warn', 'guard', 'stale source: ' + $f) }
         return
     }
     if ($selfTest -ne 'ok') {
@@ -644,10 +619,7 @@ function Enter-HuLineRepl {
     # says otherwise. Checked last so every diagnostic above keeps its precedence.
     if (-not $Force) {
         $scripted = @([HuLaunch]::ScriptedFlags([System.Environment]::GetCommandLineArgs()))
-        if ($scripted.Count -gt 0) {
-            [HuLog]::Write('info', 'guard', 'skipped: scripted launch (' + ($scripted -join ',') + ')')
-            return
-        }
+        if ($scripted.Count -gt 0) { return }
     }
 
     $history = [HuLineHistory]::new()
@@ -675,8 +647,6 @@ function Enter-HuLineRepl {
         return $s
     }
 
-    [HuLog]::Write('info', 'repl', "start history=$HistoryPath")
-    Write-Host ('hu-line log: ' + [HuLog]::Path) -ForegroundColor DarkGray
     $editorFailures = 0
     try {
         while ($true) {
@@ -684,20 +654,17 @@ function Enter-HuLineRepl {
             try {
                 $line = Read-HuLine -Prompt $promptText -History $history
             } catch {
-                # Record everything, then stay usable — but do NOT loop forever: a
-                # process with mixed class identities throws on EVERY call, which
-                # the user perceives as a flickering input line plus a dead Tab.
-                # Fall back to the stock prompt with an instruction instead.
+                # Stay usable — but do NOT loop forever: a process with mixed class
+                # identities throws on EVERY call, which the user perceives as a
+                # flickering input line plus a dead Tab. Fall back to the stock
+                # prompt with an instruction instead.
                 $editorFailures++
-                [HuLog]::Error('repl', "Read-HuLine failed (consecutive=$editorFailures)", $_)
-                [HuLog]::Write('info', 'ident', [HuLog]::Identity())
-                [HuLog]::Write('info', 'env', [HuLog]::Environment())
                 if ($editorFailures -ge 2) {
                     Write-Warning "编辑循环连续失败 $editorFailures 次：本进程的 pwsh-hu-line 类对象已不可用（最常见原因：在本窗口里热重载过模块）。"
-                    Write-Warning "已回落原生提示符。请完全退出 pwsh 重开；诊断已写入 $([HuLog]::Path)。"
+                    Write-Warning '已回落原生提示符，请完全退出 pwsh 重开。'
                     break
                 }
-                Write-Warning ("输入行失败（已记入 $([HuLog]::Path)）：$($_.Exception.Message)")
+                Write-Warning ("输入行失败：$($_.Exception.Message)")
                 continue
             }
             $editorFailures = 0
@@ -705,7 +672,6 @@ function Enter-HuLineRepl {
             if ($null -eq $line) { continue }          # Ctrl+C → cancel, reprompt
             $trimmed = $line.Trim()
             if ($trimmed -eq '') { continue }
-            [HuLog]::Write('info', 'line', ("len={0} text={1}" -f $line.Length, $line))
             if ($trimmed -in @('exit', 'quit')) {
                 if ($HistoryPath) { $history.Save($HistoryPath) }
                 exit                                    # end the whole session

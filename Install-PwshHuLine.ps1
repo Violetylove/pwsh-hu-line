@@ -95,4 +95,3 @@ if (-not $SkipProfile) {
 Say ''
 Say 'Done. Start a NEW pwsh session; it enters the hu-line REPL automatically.' 'Green'
 Say 'Inside the REPL: "stock" falls back to the stock prompt, "exit" quits pwsh.' 'DarkGray'
-Say 'Diagnostic log: ~\.hu-line.log (HuLog; $env:HU_LINE_LOG overrides).' 'DarkGray'

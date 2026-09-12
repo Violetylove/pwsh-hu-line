@@ -3,17 +3,12 @@
 # environment, so no Pester). Usage:  pwsh -NoProfile -File tests/run-tests.ps1
 $ErrorActionPreference = 'Stop'
 
-# Test children import the module; keep their diagnostic log out of the real
-# $HOME\.hu-line.log (environment variables are inherited by child processes).
-$env:HU_LINE_LOG = Join-Path ([System.IO.Path]::GetTempPath()) 'hu-line-test.log'
-
 $root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $root 'src/HuCore.ps1')
 . (Join-Path $root 'src/HuHistory.ps1')
 . (Join-Path $root 'src/HuLine.ps1')
 . (Join-Path $root 'src/HuMenu.ps1')
 . (Join-Path $root 'src/HuCommand.ps1')
-. (Join-Path $root 'src/HuLog.ps1')
 
 $script:Passed = 0
 $script:Failed = 0

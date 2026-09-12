@@ -122,19 +122,14 @@ $PROFILE 启动即接管交互循环**（`Enter-HuLineRepl`）。特性：zsh �
 - **菜单契约：编辑实时重匹配**——打字收窄、退格放宽、无匹配则收起（`$refreshMenu`）。它之所以
   安全，**全靠上面那条高水位擦除**；改这块时两件事必须一起看。
 
-### 诊断与排查
+### 语言与脚本陷阱
 
-- **现场故障先读日志，不要靠猜**（`src/HuLog.ps1`）。默认 `$HOME\.hu-line.log`；
-  `$env:HU_LINE_LOG=<path>` 改路径、`=0` 关闭；超 1MB 轮转 `.1`。关键行：`ident` = 本份代码
-  解析到的类 `RuntimeTypeHandle`（**同名类两份 = 两个 handle**）；`env` = 输出码页 / 重定向 /
-  已加载模块；`guard` = 接管前自检结论（`copies`/`staleFiles`/`selfTest`）；`line` = 每条提交
-  的命令；`error` = 带 FQID、出错位置、调用栈、InnerException 链的完整错误；`apply` 失败行额外
-  打 `buffer=<handle> applyBufferParam=<handle> identical=<bool>`，**一眼判定类身份是否错配**。
-- **参数模式下 `[Type]::Member` 不会被求值**：`Get-Item -LiteralPath [HuLog]::Path` 会把
-  `[HuLog]::Path` 当成**字面文本**传进去（报 `Cannot find a provider with the name '[HuLog]'`），
-  而且这是**非终止错误**——`try/catch` 抓不到，只在控制台刷一条，功能静默失效。要么先赋值给变量
-  （`$p = [HuLog]::Path`），要么纯 .NET（`[System.IO.FileInfo]::new($p).Length`）。测试用
-  `$Error.Clear()` + `Assert-Equal $Error.Count 0` 兜住这类静默错误。
+- **参数模式下 `[Type]::Member` 不会被求值**：`Test-Path [System.IO.Path]::GetTempPath()` 会把
+  `[System.IO.Path]::GetTempPath()` 当成**字面文本**传进去（报
+  `Cannot find a provider with the name '[System.IO.Path]::GetTempPath()'`），而且这是
+  **非终止错误**——`try/catch` 抓不到，只在控制台刷一条，功能静默失效。要么先赋值给变量
+  （`$p = [System.IO.Path]::GetTempPath()`），要么纯 .NET。测试用 `$Error.Clear()` +
+  `Assert-Equal $Error.Count 0` 兜住这类静默错误。
 - **PowerShell 没有 C 风格注释**：`catch { /* ... */ }` 能解析通过，但 `/*` 是**命令名**，只在
   那个分支真被执行时才炸（"The term '/*' is not recognized"），还会把 catch 里原本要处理的异常
   吃掉。`tests/Lint.Tests.ps1` 用真实 parser 扫全仓库的 CommandAst 名兜底。
@@ -162,12 +157,11 @@ src/HuHistory.ps1         HuLineHistory（会话历史：导航/去重/存取/�
 src/HuLine.ps1            HuLineBuffer / HuRegionRenderer / HuPathHighlighter
 src/HuMenu.ps1            HuCompletion / HuCompletionApplier / HuMenuRenderer（Tab 补全菜单）
 src/HuCommand.ps1         HuCommandHighlighter（命令名着色：能解析到的绿 / 未知红）
-src/HuLog.ps1             HuLog（诊断日志：ident/guard/line/error）
 Install-PwshHuLine.ps1    安装：拷贝到模块目录 + 标记块接线 $PROFILE（可 -Uninstall）
 demo.ps1                  交互演示（= 调用 Enter-HuLineRepl）
 tests/run-tests.ps1       零依赖测试运行器（唯一验收入口）
-tests/*.Tests.ps1         单测，按 src/ 分文件：Core（宽度/布局/编码）、History、Line（缓冲/渲染/
-                          高亮）、Menu、Command、Log、Lint（真实 parser 语法兜底）
+tests/*.Tests.ps1         单测，按 src/ 分文件：Core（宽度/布局/编码/启动态）、History、Line（缓冲/
+                          渲染/高亮）、Menu、Command、Lint（真实 parser 语法兜底）
 tests/e2e-loop.ps1        编辑循环 E2E（-KeySource 按键队列 + 内置终端模型 + 可注入终端尺寸）
 tests/e2e-console.ps1     真实控制台编码回归（必须由 conhost --headless 拉起）
 tests/e2e-identity.ps1    两份模块实例共存时的全链路回归（类身份错配）
@@ -192,7 +186,7 @@ pwsh -NoProfile -Command "& { . ./src/HuCore.ps1; . ./src/HuLine.ps1; $t=$null;$
 
 ## 代码约定
 
-- 文件按依赖顺序加载：`HuCore` → `History` → `Line` → `Menu` → `Command` → `Log`（psm1 已保证）。
+- 文件按依赖顺序加载：`HuCore` → `History` → `Line` → `Menu` → `Command`（psm1 已保证）。
 - 渲染层数据流：编辑 → `GetRegions(text)` → `Render(prompt, buffer, cursor, regions)`
   → 输出 `ESC[2K` + 渲染串 + `ESC[<col>G`；行号/折行/腾行由 `HuLayout` 负责。
 - 注释只写结论和反直觉处（1–4 行），不写排查过程；行为偏差记在代码注释 + README，

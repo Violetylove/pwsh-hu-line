@@ -38,7 +38,6 @@ pwsh -NoProfile -File Install-PwshHuLine.ps1 -Uninstall   # 卸载（只摘掉�
 
 ## 注意事项
 
-- 出问题先看日志 `~\.hu-line.log`（`$env:HU_LINE_LOG` 改路径，设 `0` 关闭）
 - 已知限制：不认 PSDrive（`HKLM:\`）的实时下划线；含 `$` 的 token 跳过；`~user/` 不支持；
   没有 `Ctrl+U/K/W` 这类编辑键
 - 改过源码后请**退出 pwsh 重开**：带类的模块不能在活着的进程里热重载
