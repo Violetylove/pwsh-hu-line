@@ -1,0 +1,10 @@
+# Build / tooling
+.vs/
+bin/
+obj/
+TestResults/
+*.user
+
+# Editors
+.idea/
+.vscode/
