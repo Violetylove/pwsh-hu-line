@@ -84,6 +84,16 @@ $PROFILE 启动即接管交互循环**（`Enter-HuLineRepl`）。特性：zsh �
   `scripted-launch-is-not-swallowed`。
 - **`& scriptblock` 不能给外层局部变量赋值**（已实测）：共享可变状态必须放进 **hashtable**
   并改成员（`$state.X = ...` 会透传），否则 helper 之间的状态写入会静默丢失。
+- **粘贴必须合并重绘，而且判据不能只信探测**：粘贴是一串"同一瞬间到达"的按键，逐键重绘会把
+  整行重画 N 次（每次还要跑文件系统路径高亮 + 历史扫描 + 补全重算），用户看到的就是从左往右
+  像弹钢琴一样刷出来（实测 30 字符 = 31 次重绘）。做法：`$repaint`/`$refreshMenu` 在爆发期内只
+  置脏（`$pending` hashtable），由循环顶部的 `$settle` 在爆发结束时补画一次。判据要**两个条件
+  同时成立**：`[Console]::KeyAvailable` 说有输入在等，**且**距上一个按键 < 30ms
+  （`$pending.GapMs`）。只信探测会出事——终端可能永远报 pending，那打字时整行就不再刷新；
+  加上间隔条件后，按键重复（~31ms）和慢速输入都照常逐键上屏。**回车分支要单独补画**：粘贴
+  可能以回车收尾，那时最后一次重绘还在延迟里。回归：`tests/e2e-loop.ps1` 的
+  `paste-burst-paints-once`（30 字符 ≤3 次重绘）与 `burst-guard-ignores-lying-probe`（探测永远
+  为真 + 每键间隔 40ms，每键都必须上屏）。
 
 ### 渲染与高亮
 
@@ -142,8 +152,9 @@ $PROFILE 启动即接管交互循环**（`Enter-HuLineRepl`）。特性：zsh �
   改动后必跑。
 - 编辑循环 E2E 入口 `tests/e2e-loop.ps1`：`-KeySource` 喂按键序列 + `-OutWriter` 抓渲染文本 +
   可注入终端尺寸。**键源耗尽必须 `throw`**，否则主循环空转导致测试挂死。
-- **断言要看得见"屏幕上画了什么"**：`InputLinePaints` 返回输入行每一次重绘的文本；「buffer 变了
-  但没重绘」这类 bug 只有屏幕级断言抓得到（只查返回值必漏）。
+- **断言要看得见"屏幕上画了什么"**：`Get-ScreenRows` 把渲染流喂进内置终端模型（含折行/滚动）
+  算出屏幕内容，`Count-Paints` 数输入行被重画了几次。「buffer 变了但没重绘」「粘贴逐键重绘」
+  这类 bug 只有屏幕级断言抓得到（只查返回值必漏）。
 - 新行为 = 新测试：宽度、缓冲、高亮 span、渲染串、光标列都要有断言。
 
 ## 目录结构

@@ -38,24 +38,40 @@ function New-KeyQueue([object[]]$Spec) {
 # screen as it was at that moment — the only way to inspect something the editor
 # tears down before it returns (an open menu, for instance). The exhaustion throw
 # is a harness mechanism, so catching it is not hiding a real failure.
-function Drive([object[]]$Spec, $History, [int]$Width = 0, [int]$Height = 0, [string]$Prompt = '', [switch]$AllowExhaustion) {
+function Drive([object[]]$Spec, $History, [int]$Width = 0, [int]$Height = 0, [string]$Prompt = '', [switch]$AllowExhaustion, [string]$Pending = '', [int]$KeyDelayMs = 0) {
     $q = New-KeyQueue $Spec
     $state = @{ I = 0 }
     # Throw when the script runs out of keys: without this the editor spins
     # forever on null keys and the test hangs instead of failing.
     $src = {
         if ($state.I -ge $q.Count) { throw "KeySource exhausted after $($state.I) keys" }
+        if ($KeyDelayMs -gt 0) { Start-Sleep -Milliseconds $KeyDelayMs }
         $v = $q[$state.I]; $state.I++; return $v
     }
+    # -Pending: the scripted stand-in for [Console]::KeyAvailable.
+    #   queue  — the rest of the queue is already waiting: what a PASTE looks like
+    #   always — a console that never stops claiming pending input (the hazard the
+    #            burst guard has to survive)
+    $probe = $null
+    if ($Pending -eq 'queue') { $probe = { $state.I -lt $q.Count } }
+    elseif ($Pending -eq 'always') { $probe = { $true } }
     $sw = [System.IO.StringWriter]::new()
     $line = ''
     try {
-        $line = Read-HuLine -Prompt $Prompt -History $History -KeySource $src -OutWriter $sw -TermCols $Width -TermRows $Height
+        $line = Read-HuLine -Prompt $Prompt -History $History -KeySource $src -OutWriter $sw `
+            -TermCols $Width -TermRows $Height -PendingSource $probe
     } catch {
         if (-not $AllowExhaustion) { throw }
         $line = '<exhausted>'
     }
     return @{ Line = $line; Screen = $sw.ToString() }
+}
+
+# How many times the input row got repainted: each $redraw erases the rows it owns
+# with ESC[2K before writing them back. Counts PAINTS, not characters — "one paint
+# per pasted character" is exactly the regression the paste-burst case pins down.
+function Count-Paints([string]$Stream) {
+    return ([regex]::Matches($Stream, [regex]::Escape("`e[2K"))).Count
 }
 
 function Check([string]$Name, [bool]$Ok, [string]$Detail) {
@@ -258,6 +274,36 @@ $final = Get-ScreenRows $r.Screen 4 80
 $menuVisible = @($final | Where-Object { $_ -match 'Get-A' }).Count -gt 0
 Check 'menu-in-tiny-window-scrolls-room' ($menuVisible -and ($final[0] -match 'Get-')) `
     ("screen=[{0}]" -f ($final -join ' / '))
+
+# --- pasting must not repaint per character ---------------------------------
+# A pasted command lands in the console input buffer as a burst (keys arriving in
+# the same instant), so the editor can tell that more input is already waiting and
+# do the expensive part — filesystem-backed path highlighting, the history scan, a
+# full-line repaint — ONCE at the end. Repainting per key is what made a paste
+# crawl across the screen like a piano run: 30 characters, 31 repaints.
+$paste = 'Get-ChildItem -Path C:\Windows'
+$spec = @()
+foreach ($ch in $paste.ToCharArray()) { $spec += [string]$ch }
+$spec += 'ENTER'
+$r = Drive $spec $h0 80 24 -Pending queue
+$paints = Count-Paints $r.Screen
+# <= 3, not == 2: one scheduling hiccup wider than the 30 ms burst gap is allowed
+# to split the burst. A regression to per-key repainting lands near 31.
+Check 'paste-burst-paints-once' (($r.Line -eq $paste) -and ($paints -le 3)) `
+    ("paints={0} of {1} chars; line=[{2}]" -f $paints, $paste.Length, $r.Line)
+
+# The guard's safety valve. Coalescing is only safe while keys keep arriving in
+# rapid succession, so the editor ALSO measures the gap between keys: a console
+# that permanently reports "input pending" (the probe can lie) must not be able to
+# starve the repaint and leave the line invisible while someone types at human
+# speed. Same probe as above, 40 ms between keys → every key must reach the screen.
+$spec = @()
+foreach ($ch in 'abcde'.ToCharArray()) { $spec += [string]$ch }
+$spec += 'ENTER'
+$r = Drive $spec $h0 80 24 -Pending always -KeyDelayMs 40
+$paints = Count-Paints $r.Screen
+Check 'burst-guard-ignores-lying-probe' (($r.Line -eq 'abcde') -and ($paints -ge 5)) `
+    ("paints={0} for 5 slow keys; line=[{1}]" -f $paints, $r.Line)
 
 # --- summary ---
 Write-Host ("SUMMARY failed={0}" -f $script:Failed)

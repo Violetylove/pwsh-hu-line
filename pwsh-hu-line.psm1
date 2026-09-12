@@ -63,6 +63,10 @@ function Read-HuLine {
         # Test hook: TextWriter capturing the rendered screen output (menu rows,
         # redraws) so tests can assert on menu open/refresh/hide.
         $OutWriter = $null,
+        # Test hook: scriptblock answering "are more keys already waiting?" — the
+        # scripted stand-in for [Console]::KeyAvailable. It lets a test hand the
+        # editor a whole paste at once and assert how the repaints get batched.
+        $PendingSource = $null,
         # Test hooks (headless): pretend the terminal is this many columns/rows so
         # the wrap-aware and scroll-aware layout can be driven and asserted without
         # a console. 0 = ask the console; with no console 0 means "unknown", which
@@ -173,6 +177,31 @@ function Read-HuLine {
             [Console]::Out.Flush()
         }
 
+        # Burst coalescing. A paste arrives as a rapid run of keystrokes, and doing
+        # the expensive work per key — filesystem-backed path highlighting, the
+        # history scan, a full-line repaint and, worst of all, a completion
+        # recompute — is what makes a pasted command crawl across the screen one
+        # character at a time. While more input is already waiting we only mark the
+        # line dirty; $settle flushes it once the burst drains. Flags live in a
+        # hashtable because `& scriptblock` cannot assign enclosing locals.
+        $burstPending = { $false }
+        if ($interactiveConsole) {
+            $burstPending = { try { [Console]::KeyAvailable } catch { $false } }
+        } elseif ($null -ne $PendingSource) {
+            $burstPending = $PendingSource
+        }
+        # LastKeyMs/GapMs: the other half of the judgement, and the reason the probe
+        # is allowed to be dumb. A console may keep claiming that input is pending;
+        # deferring on that alone would leave the line un-painted while someone types
+        # at human speed. Keys of a paste land in the same instant (gap ~0 ms).
+        $pending = @{ Line = $false; Menu = $false; Burst = $false; LastKeyMs = 0; GapMs = 30 }
+
+        # May this paint be deferred? Only inside a real burst with input waiting.
+        $deferPaint = {
+            if (-not $pending.Burst) { return $false }
+            return (& $burstPending)
+        }
+
         # Repaint state shared with $drawMenu: a cache that ONLY $redraw writes, so
         # the menu can put the cursor back where the (possibly wrapped) line wants it.
         $renderState = @{ Text = ''; CursorColumn = 1; CursorRow = 0 }
@@ -214,6 +243,13 @@ function Read-HuLine {
             [Console]::Out.Flush()
         }
         & $redraw
+
+        # Repaint unless a burst is still arriving; then just mark the line stale.
+        $repaint = {
+            if (& $deferPaint) { $pending.Line = $true; return }
+            $pending.Line = $false
+            & $redraw
+        }
 
         $submit = $false
         # ↑-walk state machine: 'none' | 'plain' (empty-buffer walk) | 'prefix'
@@ -290,6 +326,10 @@ function Read-HuLine {
         # the rows below it on screen (see tests/Menu.Tests.ps1).
         $refreshMenu = {
             if ($null -eq $menuState.Items) { return }
+            # A burst in flight: recomputing completions per pasted character is the
+            # most expensive thing this loop can do, so defer the whole refresh —
+            # $settle replays it once the burst drains.
+            if (& $deferPaint) { $pending.Line = $true; $pending.Menu = $true; return }
             $c = & $getCompletions
             if ($null -eq $c) {
                 & $hideMenu
@@ -306,9 +346,33 @@ function Read-HuLine {
                 & $drawMenu
             }
         }
+        # Flush what a burst deferred. Called at the top of the loop, i.e. right
+        # before the (blocking) next read — by then the burst has drained, or the
+        # probe says otherwise and we keep coalescing.
+        $settle = {
+            if (-not ($pending.Line -or $pending.Menu)) { return }
+            if (& $deferPaint) { return }
+            $wantMenu = $pending.Menu
+            $pending.Line = $false
+            $pending.Menu = $false
+            # An open menu needs the recompute, which repaints the line as well.
+            if ($wantMenu -and $null -ne $menuState.Items) { & $refreshMenu; return }
+            & $redraw
+        }
+        # Anchor the burst clock at the prompt: the first key then measures its gap
+        # against "now", which is the same instant, so a paste stays a burst from its
+        # very first character.
+        $pending.LastKeyMs = [Environment]::TickCount64
         while (-not $submit) {
+            & $settle
             $ki = & $readKey
             if ($null -eq $ki) { continue }
+            # How long since the previous key decides whether this is a burst; see
+            # $pending above. (First key: LastKeyMs is 0, so the gap looks huge and
+            # the paint is never deferred.)
+            $nowMs = [Environment]::TickCount64
+            $pending.Burst = (($nowMs - $pending.LastKeyMs) -lt $pending.GapMs)
+            $pending.LastKeyMs = $nowMs
             $k = $ki.Key
             $ch = $ki.KeyChar
 
@@ -325,6 +389,9 @@ function Read-HuLine {
                     $submit = $true
                     continue
                 }
+                # A paste can end in Enter while its last repaint is still deferred:
+                # paint it now, or the terminal keeps a stale, truncated line.
+                if ($pending.Line) { $pending.Line = $false; & $redraw }
                 $submit = $true; continue
             }
             if ($null -ne $menuState.Items) {
@@ -513,7 +580,7 @@ function Read-HuLine {
                 $upMode = 'none'
             }
             else { continue }
-            & $redraw
+            & $repaint
         }
         [Console]::Out.Write("`n")
         return $buffer.Text
