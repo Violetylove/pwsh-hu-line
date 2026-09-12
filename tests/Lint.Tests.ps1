@@ -8,8 +8,7 @@
 # as '[*?\[\]]' or '[/\\]' cannot produce false positives.
 It 'no source file contains a C-style comment (a command named /* or */)' {
     $repo = Split-Path -Parent $PSScriptRoot
-    $files = @(Get-ChildItem -Path $repo -Recurse -File -Include '*.ps1', '*.psm1' |
-        Where-Object { $_.FullName -notlike '*\scratch\dup\*' })   # scratch/dup is a generated copy
+    $files = @(Get-ChildItem -Path $repo -Recurse -File -Include '*.ps1', '*.psm1')
     Assert-True ($files.Count -gt 0) 'found source files to lint'
 
     $bad = [System.Collections.Generic.List[string]]::new()

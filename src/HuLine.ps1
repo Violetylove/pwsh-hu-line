@@ -98,7 +98,7 @@ class HuPathHighlighter {
 
     # Returns [object] on purpose: a [HuRegion[]] return type converts the list
     # into THIS module load's HuRegion, which fails when the regions were built
-    # by another copy of the module (tests/module-identity.ps1).
+    # by another copy of the module (tests/e2e-identity.ps1).
     [object] GetRegions([string]$text) {
         $regions = [System.Collections.Generic.List[object]]::new()
         if ([string]::IsNullOrEmpty($text)) { return @($regions) }

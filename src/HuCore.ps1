@@ -22,7 +22,7 @@ class HuStyle {
     #   "Cannot convert the HuLineBuffer value of type HuLineBuffer to type HuLineBuffer"
     #   "Cannot find an overload for Add and the argument count: 1"
     # Untyped parameters bind by duck typing and cannot hit that. Regression
-    # driver: tests/module-identity.ps1.
+    # driver: tests/e2e-identity.ps1.
     static [bool] IsEmpty($s) {
         return (-not $s.Underline) -and (-not $s.Bold) -and ($s.Foreground -eq '')
     }

@@ -54,7 +54,7 @@ try {
     [HuConsoleEncoding]::End($snapshot)
     Report 'utf8-guard-restores-codepage' ([Console]::OutputEncoding.CodePage -eq 936) "restored to CP$([Console]::OutputEncoding.CodePage)"
 } catch {
-    Report 'console-encoding-driver' $false $_.Exception.Message
+    Report 'e2e-console-driver' $false $_.Exception.Message
 }
 
 [System.IO.File]::WriteAllText($ResultPath, ($lines -join "`n"), [System.Text.UTF8Encoding]::new($false))

@@ -6,7 +6,7 @@
 # assumption. This drives it against TEMP paths via -ModuleRoot/-ProfilePath, so the
 # real user profile is never touched.
 #
-# Usage: pwsh -NoProfile -File tests/install.ps1     (RESULT lines on stdout)
+# Usage: pwsh -NoProfile -File tests/e2e-install.ps1     (RESULT lines on stdout)
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot

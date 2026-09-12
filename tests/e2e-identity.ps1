@@ -1,5 +1,5 @@
 #Requires -Version 7.0
-# module-identity.ps1 — regression driver for "two class identities, one name".
+# e2e-identity.ps1 — regression driver for "two class identities, one name".
 #
 # A PowerShell class type identity is bound per module load. When a session ends
 # up holding TWO copies of this module (a second path, a script-scope import, an
@@ -10,7 +10,7 @@
 # Every class-typed parameter/property in src/ is now untyped (duck typing), so
 # the second copy must work end to end: highlight → Tab completion → accept.
 #
-# Usage: pwsh -NoProfile -File tests/module-identity.ps1   (RESULT lines on stdout)
+# Usage: pwsh -NoProfile -File tests/e2e-identity.ps1   (RESULT lines on stdout)
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot

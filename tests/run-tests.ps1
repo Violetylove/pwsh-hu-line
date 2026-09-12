@@ -57,7 +57,7 @@ function Assert-NotContains {
 }
 
 # Collects one "RESULT <name> <PASS|FAIL> <detail>" line from an E2E driver
-# (tests/editor-loop.ps1, tests/console-encoding.ps1).
+# (tests/e2e-loop.ps1, tests/e2e-console.ps1).
 function Add-E2EResult {
     param([string]$Line, [string]$Source)
     $p = $Line -split ' ', 4
@@ -106,13 +106,13 @@ if (($pipeOut.Count -eq 1) -and ($pipeOut[0] -eq 'piped line test')) {
 # Key-loop end-to-end tests (own process; drives Read-HuLine with a key queue
 # via the -KeySource hook and asserts on results + captured screen output).
 Write-Host '-- editor loop E2E'
-$loopOut = & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'editor-loop.ps1') 2>&1
+$loopOut = & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'e2e-loop.ps1') 2>&1
 $loopResults = @($loopOut | Where-Object { $_ -like 'RESULT *' })
 $loopFailed = @($loopResults | Where-Object { $_ -like 'RESULT * FAIL *' })
-foreach ($r in $loopResults) { Add-E2EResult -Line $r -Source 'editor-loop' }
+foreach ($r in $loopResults) { Add-E2EResult -Line $r -Source 'e2e-loop' }
 if ($loopResults.Count -eq 0) {
-    $script:Failed++; $script:Failures.Add('editor-loop :: no results (driver crashed)')
-    Write-Host '  [FAIL] editor-loop driver produced no results' -ForegroundColor Red
+    $script:Failed++; $script:Failures.Add('e2e-loop :: no results (driver crashed)')
+    Write-Host '  [FAIL] e2e-loop driver produced no results' -ForegroundColor Red
     $loopOut | Select-Object -Last 5 | ForEach-Object { Write-Host ('         ' + $_) -ForegroundColor Red }
 }
 
@@ -125,13 +125,13 @@ Write-Host '-- console encoding (real console)'
 $conhost = Join-Path $env:SystemRoot 'System32/conhost.exe'
 if (Test-Path $conhost) {
     $encResult = Join-Path ([System.IO.Path]::GetTempPath()) ('hu-line-enc-' + [guid]::NewGuid().ToString('N') + '.txt')
-    & $conhost --headless pwsh -NoProfile -File (Join-Path $PSScriptRoot 'console-encoding.ps1') -ResultPath $encResult 2>&1 | Out-Null
+    & $conhost --headless pwsh -NoProfile -File (Join-Path $PSScriptRoot 'e2e-console.ps1') -ResultPath $encResult 2>&1 | Out-Null
     $encLines = @()
     if (Test-Path $encResult) { $encLines = @(Get-Content $encResult) }
-    foreach ($r in ($encLines | Where-Object { $_ -like 'RESULT *' })) { Add-E2EResult -Line $r -Source 'console-encoding' }
+    foreach ($r in ($encLines | Where-Object { $_ -like 'RESULT *' })) { Add-E2EResult -Line $r -Source 'e2e-console' }
     if ($encLines.Count -eq 0) {
-        $script:Failed++; $script:Failures.Add('console-encoding :: no results (driver crashed)')
-        Write-Host '  [FAIL] console-encoding driver produced no results' -ForegroundColor Red
+        $script:Failed++; $script:Failures.Add('e2e-console :: no results (driver crashed)')
+        Write-Host '  [FAIL] e2e-console driver produced no results' -ForegroundColor Red
     }
     Remove-Item $encResult -ErrorAction SilentlyContinue
 } else {
@@ -143,24 +143,24 @@ if (Test-Path $conhost) {
 # value of type HuLineBuffer to type HuLineBuffer"); the driver loads a real
 # second copy and asserts it still works end to end.
 Write-Host '-- module identity (two copies loaded)'
-$idOut = & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'module-identity.ps1') 2>&1
+$idOut = & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'e2e-identity.ps1') 2>&1
 $idResults = @($idOut | Where-Object { $_ -like 'RESULT *' })
-foreach ($r in $idResults) { Add-E2EResult -Line $r -Source 'module-identity' }
+foreach ($r in $idResults) { Add-E2EResult -Line $r -Source 'e2e-identity' }
 if ($idResults.Count -eq 0) {
-    $script:Failed++; $script:Failures.Add('module-identity :: no results (driver crashed)')
-    Write-Host '  [FAIL] module-identity driver produced no results' -ForegroundColor Red
+    $script:Failed++; $script:Failures.Add('e2e-identity :: no results (driver crashed)')
+    Write-Host '  [FAIL] e2e-identity driver produced no results' -ForegroundColor Red
     $idOut | Select-Object -Last 5 | ForEach-Object { Write-Host ('         ' + $_) -ForegroundColor Red }
 }
 
 # Deployment: the installer copies the module, wires $PROFILE between markers and
 # can undo both — driven against TEMP paths so the real profile is never touched.
 Write-Host '-- install / uninstall'
-$instOut = & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'install.ps1') 2>&1
+$instOut = & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'e2e-install.ps1') 2>&1
 $instResults = @($instOut | Where-Object { $_ -like 'RESULT *' })
-foreach ($r in $instResults) { Add-E2EResult -Line $r -Source 'install' }
+foreach ($r in $instResults) { Add-E2EResult -Line $r -Source 'e2e-install' }
 if ($instResults.Count -eq 0) {
-    $script:Failed++; $script:Failures.Add('install :: no results (driver crashed)')
-    Write-Host '  [FAIL] install driver produced no results' -ForegroundColor Red
+    $script:Failed++; $script:Failures.Add('e2e-install :: no results (driver crashed)')
+    Write-Host '  [FAIL] e2e-install driver produced no results' -ForegroundColor Red
     $instOut | Select-Object -Last 5 | ForEach-Object { Write-Host ('         ' + $_) -ForegroundColor Red }
 }
 

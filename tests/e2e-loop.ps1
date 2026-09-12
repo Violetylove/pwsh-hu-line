@@ -1,9 +1,9 @@
 #Requires -Version 7.0
-# editor-loop.ps1 — end-to-end tests for the Read-HuLine key loop.
+# e2e-loop.ps1 — end-to-end tests for the Read-HuLine key loop.
 # Runs in its own pwsh process (module classes are module-scoped; the script
 # dot-sources HuHistory.ps1 into the global scope to build history objects).
 #
-# Usage: pwsh -NoProfile -File tests/editor-loop.ps1     (exit 0 = all pass)
+# Usage: pwsh -NoProfile -File tests/e2e-loop.ps1     (exit 0 = all pass)
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -207,7 +207,7 @@ Check 'ctrl-l-clearscreen' (($r.Line -eq 'abc') -and ($r.Screen -match "`e\[2J")
 # (Windows console behaviour) and scrolling. Modelling the WIDTH is the point —
 # the reported "leftover characters after Enter" was a multi-line tooltip making
 # a menu row wrap past the rows Clear() erases, which no escape-stream assertion
-# could see (see scratch/screen-model.ps1 for the standalone probe).
+# could see.
 
 $r = Drive @('G', 'e', 't', '-', 'TAB', 'ENTER') $h0
 $final = Get-ScreenRows $r.Screen 24 80

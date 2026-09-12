@@ -34,7 +34,7 @@ It 'command: every command in a sequence or pipeline' {
 It 'command: a quoted command name keeps its quotes in the span' {
     # `& 'name'` is the shape that makes a quoted string a command name; a bare
     # leading quote is a parse error and the parser hands the trailing token over
-    # as the command instead (scratch/quote-probe.ps1).
+    # as the command instead.
     $h = New-CmdHighlighter @{ 'Get-ChildItem' = 'command' }
     Assert-Equal (Get-CmdSpan $h.GetRegions("& 'Get-ChildItem' x")) '2..17:green' 'extent includes quotes'
 }
