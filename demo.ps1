@@ -26,5 +26,8 @@ Write-Host 'hu-line REPL — 输入命令回车执行；↑/↓ 历史；Ctrl+C 
 Write-Host 'exit/quit 退出 pwsh；stock/native 回落原生 PSReadLine 提示符。' -ForegroundColor DarkGray
 Write-Host '已存在的路径及其真实前缀会实时显示下划线。' -ForegroundColor DarkGray
 
-if ($HistoryPath) { Enter-HuLineRepl -HistoryPath $HistoryPath }
-else { Enter-HuLineRepl }
+# -Force: Enter-HuLineRepl steps aside for `pwsh -File ...` launches so a wired
+# $PROFILE never swallows scripts — and demo.ps1 IS such a launch. Taking over is
+# the whole point here.
+if ($HistoryPath) { Enter-HuLineRepl -HistoryPath $HistoryPath -Force }
+else { Enter-HuLineRepl -Force }

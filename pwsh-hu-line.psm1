@@ -561,16 +561,22 @@ function Read-HuLine {
                        prompt (REPL is started from $PROFILE, so this returns
                        control to the normal interactive loop)
     Ctrl+C cancels the current line and reprompts. History persists to
-    -HistoryPath (default ~\.hu-line_history).
+    -HistoryPath (default ~\.hu-line_history). A launch that was told to run
+    something (`-File`, `-Command`, `-NonInteractive`) is left alone, so a wired
+    $PROFILE never swallows scripts; pass -Force to take over anyway.
 .PARAMETER HistoryPath
     History file; loaded at start, saved on exit. '' disables persistence.
+.PARAMETER Force
+    Take over even when pwsh was launched to run a script or command. Needed by
+    explicit callers such as demo.ps1 (itself started with -File).
 .EXAMPLE
     Enter-HuLineRepl
 #>
 function Enter-HuLineRepl {
     [CmdletBinding()]
     param(
-        [string]$HistoryPath = (Join-Path $HOME '.hu-line_history')
+        [string]$HistoryPath = (Join-Path $HOME '.hu-line_history'),
+        [switch]$Force
     )
     # --- stale-process guards (see the class-identity trap in AGENTS.md) --------
     # A pwsh process cannot hot-reload a class-carrying module safely. Run all
@@ -629,6 +635,19 @@ function Enter-HuLineRepl {
     if ([Console]::IsInputRedirected) {
         Write-Warning 'Enter-HuLineRepl needs a real console; stdin is redirected.'
         return
+    }
+
+    # A wired $PROFILE calls us for EVERY pwsh start — including `pwsh -File x.ps1`
+    # and `pwsh -Command ...`, which keep a REAL console on stdin and so walk right
+    # past the check above. Taking over there swallows the script (its first line
+    # never runs; the process just parks at a prompt). Step aside unless the caller
+    # says otherwise. Checked last so every diagnostic above keeps its precedence.
+    if (-not $Force) {
+        $scripted = @([HuLaunch]::ScriptedFlags([System.Environment]::GetCommandLineArgs()))
+        if ($scripted.Count -gt 0) {
+            [HuLog]::Write('info', 'guard', 'skipped: scripted launch (' + ($scripted -join ',') + ')')
+            return
+        }
     }
 
     $history = [HuLineHistory]::new()

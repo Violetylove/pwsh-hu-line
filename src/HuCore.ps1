@@ -302,3 +302,28 @@ class HuLayout {
         return @{ Row = $row; Col = $col }
     }
 }
+
+# Launch-mode classifier. A $PROFILE-wired REPL runs for EVERY pwsh start, and a
+# `-File`/`-Command` launch keeps a REAL console on stdin — so the "stdin is
+# redirected" check in Enter-HuLineRepl cannot catch it, and the REPL would take
+# over: the script's first line never runs, the process just parks at the prompt.
+# Pure, so the classification is unit-tested here; the real-console proof is in
+# tests/e2e-console.ps1.
+class HuLaunch {
+    # Switches that mean "pwsh was started to run something", not to sit at a prompt.
+    static [string[]] ScriptFlags() {
+        return @('-File', '-Command', '-c', '-EncodedCommand', '-e', '-ec', '-NonInteractive')
+    }
+
+    # The flags actually present in a command line (empty = interactive start).
+    # -contains is case-insensitive, matching how pwsh parses its own switches.
+    static [object] ScriptedFlags([string[]]$commandLine) {
+        $hits = [System.Collections.Generic.List[string]]::new()
+        if ($null -eq $commandLine) { return $hits.ToArray() }
+        $known = [HuLaunch]::ScriptFlags()
+        foreach ($a in $commandLine) {
+            if ($null -ne $a -and $known -contains $a) { [void]$hits.Add($a) }
+        }
+        return $hits.ToArray()
+    }
+}

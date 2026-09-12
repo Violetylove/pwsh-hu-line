@@ -148,3 +148,30 @@ It 'HuConsoleEncoding.End tolerates a null snapshot (no console)' {
     [HuConsoleEncoding]::End($null)     # must not throw
     Assert-True $true 'null snapshot is a no-op'
 }
+
+# HuLaunch — tells "come sit at a prompt" apart from "run this and exit". The
+# wired $PROFILE calls Enter-HuLineRepl unconditionally, and a -File/-Command
+# launch keeps a real console on stdin, so a mis-classified one gets swallowed
+# (the script never runs). Real-console proof: tests/e2e-console.ps1.
+
+It 'launch: an interactive start carries no script flags' {
+    Assert-Equal (@([HuLaunch]::ScriptedFlags(@('C:\pwsh.exe', '-NoLogo'))).Count) 0 'plain start'
+    Assert-Equal (@([HuLaunch]::ScriptedFlags(@('C:\pwsh.exe'))).Count) 0 'no arguments'
+    Assert-Equal (@([HuLaunch]::ScriptedFlags($null)).Count) 0 'null command line'
+}
+
+It 'launch: -File / -Command / -EncodedCommand / -NonInteractive are scripted' {
+    Assert-True (@([HuLaunch]::ScriptedFlags(@('pwsh.exe', '-File', 'x.ps1'))) -contains '-File') '-File'
+    Assert-True (@([HuLaunch]::ScriptedFlags(@('pwsh.exe', '-Command', 'Enter-HuLineRepl'))) -contains '-Command') '-Command'
+    Assert-True (@([HuLaunch]::ScriptedFlags(@('pwsh.exe', '-EncodedCommand', 'AAA='))) -contains '-EncodedCommand') '-EncodedCommand'
+    Assert-True (@([HuLaunch]::ScriptedFlags(@('pwsh.exe', '-NonInteractive'))) -contains '-NonInteractive') '-NonInteractive'
+}
+
+It 'launch: switch matching is case-insensitive, like pwsh itself' {
+    Assert-True (@([HuLaunch]::ScriptedFlags(@('pwsh.exe', '-file', 'x.ps1'))) -contains '-File') 'lowercase -file'
+    Assert-Equal (@([HuLaunch]::ScriptedFlags(@('pwsh.exe', '-NoLogo'))).Count) 0 'unrelated switch'
+}
+
+It 'launch: a flag-looking argument still counts (deliberate over-approximation)' {
+    Assert-True (@([HuLaunch]::ScriptedFlags(@('pwsh.exe', '-File', 'x.ps1', '-Command'))) -contains '-Command') 'literal -Command argument'
+}

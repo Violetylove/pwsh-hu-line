@@ -74,6 +74,14 @@ $PROFILE 启动即接管交互循环**（`Enter-HuLineRepl`）。特性：zsh �
 - **快捷键属于编辑器层，不能委托**：pwsh 引擎能交的只是补全/解析/历史数据，键位绑定属于
   "画行的那一层"。我们接手了循环 ⇒ PSReadLine 的整张键位表失效（Ctrl+L/U/Z… 都得自己实现）。
   新增绑定请配套 `tests/e2e-loop.ps1` 场景。
+- **接管必须认得"启动态"**：`$PROFILE` 对每个 pwsh 进程都生效，而 `pwsh -File x.ps1` /
+  `pwsh -Command ...` 的 stdin 仍是**真控制台**（`IsInputRedirected` 拦不住），无条件接管会把
+  脚本吞掉——脚本一行都跑不到，进程停在提示符等按键。做法：
+  `[HuLaunch]::ScriptedFlags([Environment]::GetCommandLineArgs())` 命中
+  `-File`/`-Command`/`-c`/`-EncodedCommand`/`-e`/`-ec`/`-NonInteractive` 就不接管；这道判定
+  放在其它自检**之后**，好让"多实例/过期/编码"这些诊断保住优先级。显式调用者（`demo.ps1`，
+  它自己就是 `-File` 启的）传 `-Force`。真控制台回归：`tests/e2e-console.ps1` 的
+  `scripted-launch-is-not-swallowed`。
 - **`& scriptblock` 不能给外层局部变量赋值**（已实测）：共享可变状态必须放进 **hashtable**
   并改成员（`$state.X = ...` 会透传），否则 helper 之间的状态写入会静默丢失。
 
@@ -133,8 +141,10 @@ $PROFILE 启动即接管交互循环**（`Enter-HuLineRepl`）。特性：zsh �
 
 ### 测试与验收
 
-- PowerShell Gallery 在此环境不可达 → **测试必须零依赖**（`tests/run-tests.ps1`，不要引入
-  Pester）。这是唯一验收入口，改动后必跑。
+- **测试零依赖**（`tests/run-tests.ps1`，不引入 Pester）：这是主动选择——少一层依赖和版本漂移。
+  旧结论"PowerShell Gallery 不可达"**已作废**（实测 `Find-PSResource` 正常，api/v2 直连与走
+  localhost:10000 代理都是 200），发布到 Gallery 这条路是通的。`run-tests.ps1` 是唯一验收入口，
+  改动后必跑。
 - 编辑循环 E2E 入口 `tests/e2e-loop.ps1`：`-KeySource` 喂按键序列 + `-OutWriter` 抓渲染文本 +
   可注入终端尺寸。**键源耗尽必须 `throw`**，否则主循环空转导致测试挂死。
 - **断言要看得见"屏幕上画了什么"**：`InputLinePaints` 返回输入行每一次重绘的文本；「buffer 变了
@@ -146,7 +156,8 @@ $PROFILE 启动即接管交互循环**（`Enter-HuLineRepl`）。特性：zsh �
 ```
 pwsh-hu-line.psd1/.psm1   模块入口：Read-HuLine（行编辑器）、Enter-HuLineRepl（REPL 宿主）、
                           Get-HuRegions（调试导出）
-src/HuCore.ps1            HuStyle / HuRegion / HuWidth / HuLayout / HuConsoleEncoding（无依赖，先加载）
+src/HuCore.ps1            HuStyle / HuRegion / HuWidth / HuLayout / HuConsoleEncoding / HuLaunch
+                          （无依赖，先加载）
 src/HuHistory.ps1         HuLineHistory（会话历史：导航/去重/存取/搜索）
 src/HuLine.ps1            HuLineBuffer / HuRegionRenderer / HuPathHighlighter
 src/HuMenu.ps1            HuCompletion / HuCompletionApplier / HuMenuRenderer（Tab 补全菜单）
